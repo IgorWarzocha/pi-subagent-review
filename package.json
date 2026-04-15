@@ -1,0 +1,37 @@
+{
+  "name": "@howaboua/pi-subagent-review",
+  "version": "0.1.0",
+  "description": "Pi extension that adds /review via an isolated review subagent.",
+  "license": "MIT",
+  "files": [
+    "index.ts",
+    "src",
+    "review.prompt.md",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "review",
+    "code-review",
+    "subagent",
+    "agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IgorWarzocha/pi-subagent-review.git"
+  },
+  "homepage": "https://github.com/IgorWarzocha/pi-subagent-review#readme",
+  "bugs": {
+    "url": "https://github.com/IgorWarzocha/pi-subagent-review/issues"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  }
+}
