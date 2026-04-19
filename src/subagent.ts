@@ -35,6 +35,7 @@ export async function runReviewSubagent(task: string, cwd: string, config: Requi
 	const promptText = [
 		"Run as the Review Subagent inside an isolated no-session RPC subprocess.",
 		"Stay strictly in review mode. Do not edit files or propose implementation plans beyond concise fixes.",
+		"Do not stop after one or two findings; keep looking for additional credible issues, aiming for roughly 5-15 if warranted.",
 		"Mode: review",
 		`Task: ${task}`,
 	].join("\n\n");

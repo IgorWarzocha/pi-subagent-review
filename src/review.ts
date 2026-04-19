@@ -119,6 +119,9 @@ export function buildReviewTask(review: ReviewContext, extraFocus: string): stri
 	sections.push(
 		"",
 		"Return prioritized, actionable findings only.",
+		"Be slightly lenient: include lower-severity but still concrete, actionable issues when supported by evidence.",
+		"Do not stop after finding only one or two issues; keep looking for additional credible findings.",
+		"Aim for roughly 5-15 issues if the diff supports that many, but do not pad or invent findings.",
 		"Focus on correctness, regressions, security, data loss, performance, concurrency, and missing tests.",
 		"Reference specific files and line ranges when possible.",
 		"If there are no actionable issues worth flagging, say that clearly.",
