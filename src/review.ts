@@ -140,6 +140,6 @@ export function buildReviewUserMessage(review: ReviewContext, findings: string):
 		"",
 		findings.trim() || "No actionable issues found.",
 		"",
-		"Please address the findings above. If there are no actionable issues, briefly confirm that.",
+		"Review the findings above in light of the prior conversation. Some choices may reflect intentional decisions the review subagent could not see; address only clearly worthwhile issues, and ask before changing context-dependent, low-impact, or diminishing-return items.",
 	].join("\n");
 }

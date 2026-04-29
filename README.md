@@ -4,7 +4,7 @@
 
 - `/review`
 
-It runs an isolated review subagent against your current repo, injects the findings back into the session as a user message, and the main agent then automatically continues by addressing those findings. It is modelled after Codex CLI's /review command.
+It runs an isolated review subagent against your current repo, injects the findings back into the session as a user message, and asks the main agent to consider those findings in light of the prior conversation before deciding what to address. It is modelled after Codex CLI's /review command.
 
 ## What it does
 
@@ -15,7 +15,7 @@ It runs an isolated review subagent against your current repo, injects the findi
 - inspects committed and dirty worktree changes
 - runs an isolated review subagent
 - sends the findings back into the current Pi session as a user message
-- as a result, the main agent automatically works through the review findings
+- as a result, the main agent reviews the findings against the prior conversation and addresses only clearly worthwhile issues
 
 ## Automatic base branch selection
 
