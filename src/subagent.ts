@@ -18,7 +18,7 @@ export function getFinalOutput(messages: any[]): string {
 	return "";
 }
 
-export async function runReviewSubagent(task: string, cwd: string, config: Required<ReviewConfig>) {
+export async function runReviewSubagent(task: string, cwd: string, config: Required<ReviewConfig>, signal?: AbortSignal) {
 	const details = createChildRunDetails(task, cwd, config);
 	const args = [
 		"--mode",
@@ -147,6 +147,11 @@ export async function runReviewSubagent(task: string, cwd: string, config: Requi
 		]);
 	};
 
+	const abortProcess = () => {
+		void stopProcess();
+	};
+	signal?.addEventListener("abort", abortProcess, { once: true });
+
 	proc.stdout.on("data", (chunk) => {
 		stdoutBuffer += chunk.toString();
 		const lines = stdoutBuffer.split("\n");
@@ -173,13 +178,16 @@ export async function runReviewSubagent(task: string, cwd: string, config: Requi
 	});
 
 	try {
+		if (signal?.aborted) throw new Error(`${REVIEW_LABEL} aborted.`);
 		await sendCommand({ type: "get_state" }, RPC_READY_TIMEOUT_MS);
+		if (signal?.aborted) throw new Error(`${REVIEW_LABEL} aborted.`);
 		await sendCommand({ type: "set_auto_compaction", enabled: true });
 		await sendCommand({ type: "set_auto_retry", enabled: true });
 		await sendCommand({ type: "prompt", message: promptText });
 		promptSent = true;
 
 		while (true) {
+			if (signal?.aborted) throw new Error(`${REVIEW_LABEL} aborted.`);
 			if (processClosed) break;
 			await sleep(RPC_POLL_MS);
 			let state: { isStreaming: boolean; isCompacting: boolean; pendingMessageCount: number };
@@ -194,6 +202,7 @@ export async function runReviewSubagent(task: string, cwd: string, config: Requi
 			if (promptSent && agentEndCount > 0 && isIdle && isQuiet) break;
 		}
 	} finally {
+		signal?.removeEventListener("abort", abortProcess);
 		await stopProcess();
 	}
 

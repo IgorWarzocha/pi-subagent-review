@@ -37,7 +37,8 @@ export function registerReviewCommand(pi: ExtensionAPI) {
 			}
 
 			try {
-				details = await runReviewSubagent(task, review.repoRoot, reviewConfig);
+				details = await runReviewSubagent(task, review.repoRoot, reviewConfig, ctx.signal);
+				if (ctx.signal?.aborted) return;
 				const finalOutput = getFinalOutput(details.messages).trim() || "No actionable issues found.";
 				if (isSubagentFailure(details)) throw new Error(details.errorMessage || details.stderr || finalOutput);
 
