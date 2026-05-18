@@ -7,12 +7,36 @@ function normalizeThinking(value: ThinkingLevel | undefined, fallback: ThinkingL
 	return value && ALLOWED_THINKING.has(value) ? value : fallback;
 }
 
+function migrateConfigFile(configPath: string): void {
+	let parsed: ReviewConfig | undefined;
+	try {
+		parsed = JSON.parse(fs.readFileSync(configPath, "utf8")) as ReviewConfig;
+	} catch {
+		return;
+	}
+
+	if (parsed.summary !== undefined) return;
+
+	const reviewModel = typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_CONFIG.model;
+	const migrated: ReviewConfig = {
+		...parsed,
+		summary: {
+			enabled: DEFAULT_CONFIG.summary.enabled,
+			model: reviewModel,
+			thinking: DEFAULT_CONFIG.summary.thinking,
+		},
+	};
+	fs.writeFileSync(configPath, `${JSON.stringify(migrated, null, 2)}\n`, "utf8");
+}
+
 export function ensureConfigFile(): string {
 	const agentDir = getAgentDir();
 	const configPath = getConfigPath();
 	fs.mkdirSync(agentDir, { recursive: true });
 	if (!fs.existsSync(configPath)) {
 		fs.writeFileSync(configPath, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, "utf8");
+	} else {
+		migrateConfigFile(configPath);
 	}
 	return configPath;
 }
@@ -28,7 +52,7 @@ export function readConfig(): Omit<ResolvedReviewConfig, "source"> {
 
 	const reviewModel = typeof parsed?.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_CONFIG.model;
 	const summary = parsed?.summary;
-	const configuredSummaryModel = typeof summary?.model === "string" && summary.model.trim() ? summary.model.trim() : DEFAULT_CONFIG.summary.model;
+	const configuredSummaryModel = typeof summary?.model === "string" && summary.model.trim() ? summary.model.trim() : reviewModel;
 	const defaultSummaryModelParsed = splitModelRef(DEFAULT_CONFIG.summary.model)!;
 	const summaryModelParsed = splitModelRef(configuredSummaryModel) ?? defaultSummaryModelParsed;
 	const summaryModel = `${summaryModelParsed.provider}/${summaryModelParsed.modelId}`;
