@@ -53,6 +53,7 @@ export function registerReviewCommand(pi: ExtensionAPI) {
 						conversationSummary = await buildReviewConversationSummary(ctx, reviewConfig);
 					}
 				} catch (error) {
+					if (ctx.signal?.aborted) return;
 					ctx.ui.notify(`Conversation summary unavailable: ${error instanceof Error ? error.message : String(error)}; continuing with diff-only review.`, "warning");
 				}
 

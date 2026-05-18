@@ -50,6 +50,18 @@ function buildSummaryInput(entries: SessionEntry[]): string {
 		.join("\n\n---\n\n");
 }
 
+function escapeConversationBlock(conversation: string): string {
+	return conversation.replaceAll("</conversation>", "&lt;/conversation&gt;").replaceAll("<conversation>", "&lt;conversation&gt;");
+}
+
+function isNoRelevantContext(summary: string): boolean {
+	return summary
+		.trim()
+		.toLowerCase()
+		.replace(/^#+\s*/, "")
+		.replace(/[.!]+$/, "") === "no relevant conversation context";
+}
+
 function buildPrompt(conversation: string): string {
 	return `You are preparing a compact branch-style summary for an isolated code-review subagent.
 
@@ -74,7 +86,7 @@ Capture only:
 Write concise structured markdown. If the conversation contains no useful review context, output exactly: No relevant conversation context.
 
 <conversation>
-${conversation}
+${escapeConversationBlock(conversation)}
 </conversation>`;
 }
 
@@ -115,6 +127,6 @@ export async function buildReviewConversationSummary(ctx: ExtensionCommandContex
 		.join("\n")
 		.trim();
 
-	if (!summary || summary === "No relevant conversation context.") return undefined;
+	if (!summary || isNoRelevantContext(summary)) return undefined;
 	return summary;
 }
