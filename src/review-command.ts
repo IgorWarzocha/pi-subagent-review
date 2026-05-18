@@ -1,6 +1,7 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { REVIEW_COMMAND } from "./constants.js";
 import { createChildRunDetails, isSubagentFailure, resolveReviewConfig } from "./config.js";
+import { buildReviewConversationSummary } from "./conversation-summary.js";
 import { buildReviewTask, buildReviewUserMessage, detectReviewContext } from "./review.js";
 import { getFinalOutput, runReviewSubagent } from "./subagent.js";
 
@@ -8,12 +9,24 @@ export function registerReviewCommand(pi: ExtensionAPI) {
 	pi.registerCommand(REVIEW_COMMAND, {
 		description: "Run an isolated code-review subagent against the current repo and send the findings back as a user message",
 		handler: async (args, ctx) => {
+			const setReviewWidget = (message?: string) => {
+				ctx.ui.setWidget(
+					REVIEW_COMMAND,
+					message
+						? [
+							ctx.ui.theme.fg("accent", "╭─ Review"),
+							`${ctx.ui.theme.fg("muted", "│")} ${message}`,
+							ctx.ui.theme.fg("muted", "╰─ Please wait"),
+						]
+						: undefined,
+					{ placement: "aboveEditor" },
+				);
+			};
+
 			if (!ctx.isIdle()) {
 				ctx.ui.notify(`Waiting for the current turn to finish before running /${REVIEW_COMMAND}...`, "info");
 				await ctx.waitForIdle();
 			}
-
-			ctx.ui.notify(`Running /${REVIEW_COMMAND} against the current repo...`, "info");
 
 			let review;
 			try {
@@ -29,14 +42,28 @@ export function registerReviewCommand(pi: ExtensionAPI) {
 				return;
 			}
 
-			const task = buildReviewTask(review, args);
 			const reviewConfig = await resolveReviewConfig(pi, ctx);
-			let details = createChildRunDetails(task, review.repoRoot, reviewConfig);
-			if (reviewConfig.source === "current") {
-				ctx.ui.notify(`Configured review model unavailable; falling back to current session model ${reviewConfig.model}.`, "warning");
-			}
-
+			let conversationSummary: string | undefined;
+			let details = createChildRunDetails("", review.repoRoot, reviewConfig);
 			try {
+				try {
+					if (reviewConfig.summary.enabled) {
+						if (reviewConfig.summary.source === "current") ctx.ui.notify(`Configured summary model unavailable; falling back to current session model ${reviewConfig.summary.model}.`, "warning");
+						setReviewWidget("Preparing review context…");
+						conversationSummary = await buildReviewConversationSummary(ctx, reviewConfig);
+					}
+				} catch (error) {
+					if (ctx.signal?.aborted) return;
+					ctx.ui.notify(`Conversation summary unavailable: ${error instanceof Error ? error.message : String(error)}; continuing with diff-only review.`, "warning");
+				}
+
+				const task = buildReviewTask(review, args, conversationSummary);
+				details = createChildRunDetails(task, review.repoRoot, reviewConfig);
+				if (reviewConfig.source === "current") {
+					ctx.ui.notify(`Configured review model unavailable; falling back to current session model ${reviewConfig.model}.`, "warning");
+				}
+
+				setReviewWidget("Reviewing changes…");
 				details = await runReviewSubagent(task, review.repoRoot, reviewConfig, ctx.signal);
 				if (ctx.signal?.aborted) return;
 				const finalOutput = getFinalOutput(details.messages).trim() || "No actionable issues found.";
@@ -51,6 +78,8 @@ export function registerReviewCommand(pi: ExtensionAPI) {
 				details.exitCode = details.exitCode || 1;
 				details.errorMessage = message;
 				ctx.ui.notify(`/${REVIEW_COMMAND} failed: ${message}`, "error");
+			} finally {
+				setReviewWidget();
 			}
 		},
 	});

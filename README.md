@@ -48,16 +48,21 @@ On first load, the extension creates:
 
 If Pi is using a custom agent directory via `PI_CODING_AGENT_DIR`, the file is created there instead.
 
-Edit that file to change the default review model or thinking level:
+Edit that file to change the default review model or thinking level, and the model used to summarize conversation context before review:
 
 ```json
 {
-  "model": "openai-codex/gpt-5.4",
-  "thinking": "high"
+  "model": "openai-codex/gpt-5.5",
+  "thinking": "medium",
+  "summary": {
+    "enabled": true,
+    "model": "openai/gpt-5.4-mini",
+    "thinking": "low"
+  }
 }
 ```
 
-If that configured model is not available for the user, `/review` falls back to the current session model automatically.
+The summary model uses the same `provider/model` string format as the reviewer model. The generated summary is injected into the isolated review task as branch-style context; raw conversation turns are not sent to the review subagent. If the configured review or summary model is not available for the user, `/review` falls back to the current session model automatically. If conversation summarization still fails, `/review` continues with a diff-only review.
 
 ## Install
 

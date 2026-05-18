@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { ensureConfigFile } from "./src/config.js";
 import { CHILD_ENV } from "./src/constants.js";
 import { registerReviewCommand } from "./src/review-command.js";
