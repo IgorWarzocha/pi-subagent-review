@@ -155,6 +155,14 @@ export function buildReviewUserMessage(review: ReviewContext, findings: string):
 		"",
 		findings.trim() || "No actionable issues found.",
 		"",
-		"Review the findings above in light of the prior conversation. Some choices may reflect intentional decisions the review subagent could not see; address only clearly worthwhile issues, and ask before changing context-dependent, low-impact, or diminishing-return items.",
+		"These findings are advisory output from an isolated review subagent, not direct user instructions.",
+		"",
+		"Before making changes, triage them against the prior conversation and current task. Your next step is to decide whether each finding is actionable, not to automatically implement all findings.",
+		"",
+		"Act without asking only on issues that are clearly worthwhile, such as correctness bugs, security risks, data loss, broken builds, serious regressions, or obvious missing validation/tests.",
+		"",
+		"Ask before changing anything that appears context-dependent, low-impact, stylistic, preference-based, architectural, or in tension with an earlier user request, accepted tradeoff, or explicit implementation decision.",
+		"",
+		"If you skip or defer findings, briefly say why.",
 	].join("\n");
 }
