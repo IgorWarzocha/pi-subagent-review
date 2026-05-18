@@ -4,7 +4,7 @@
 
 - `/review`
 
-It runs an isolated review subagent against your current repo, injects the findings back into the session as a user message, and asks the main agent to consider those findings in light of the prior conversation before deciding what to address. It is modelled after Codex CLI's /review command.
+It runs an isolated review subagent against your current repo, optionally prepares a compact conversation-context summary first, injects the findings back into the session as a user message, and asks the main agent to triage those advisory findings before deciding what to address. It is modelled after Codex CLI's /review command.
 
 ## What it does
 
@@ -13,9 +13,17 @@ It runs an isolated review subagent against your current repo, injects the findi
 - chooses a base branch automatically
 - computes the merge base with `HEAD`
 - inspects committed and dirty worktree changes
+- summarizes the current Pi session branch as review context, when enabled
 - runs an isolated review subagent
 - sends the findings back into the current Pi session as a user message
-- as a result, the main agent reviews the findings against the prior conversation and addresses only clearly worthwhile issues
+- makes clear that the findings are advisory, not direct user instructions, so the main agent should triage them against prior context before editing
+
+While `/review` is running, the extension shows a small review widget above the editor with one of two states:
+
+- `Preparing review context…`
+- `Reviewing changes…`
+
+The widget is UI-only and is cleared when the command finishes, fails, or is cancelled.
 
 ## Automatic base branch selection
 
@@ -63,6 +71,20 @@ Edit that file to change the default review model or thinking level, and the mod
 ```
 
 The summary model uses the same `provider/model` string format as the reviewer model. The generated summary is injected into the isolated review task as branch-style context; raw conversation turns are not sent to the review subagent. If the configured review or summary model is not available for the user, `/review` falls back to the current session model automatically. If conversation summarization still fails, `/review` continues with a diff-only review.
+
+Existing config files from older versions are migrated on load. If a config has `model` and `thinking` but no `summary` block, the extension adds one using the same model and low thinking:
+
+```json
+{
+  "summary": {
+    "enabled": true,
+    "model": "<existing review model>",
+    "thinking": "low"
+  }
+}
+```
+
+If a `summary` block already exists, it is left unchanged.
 
 ## Install
 
