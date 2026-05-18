@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { CHILD_ENV, REVIEW_LABEL, REVIEW_PROMPT_PATH, RPC_POLL_MS, RPC_QUIESCENCE_MS, RPC_READY_TIMEOUT_MS, RPC_RESPONSE_TIMEOUT_MS } from "./constants.js";
 import { createChildRunDetails } from "./config.js";
-import type { ReviewConfig } from "./types.js";
+import type { ResolvedReviewConfig } from "./types.js";
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,7 +18,7 @@ export function getFinalOutput(messages: any[]): string {
 	return "";
 }
 
-export async function runReviewSubagent(task: string, cwd: string, config: Required<ReviewConfig>, signal?: AbortSignal) {
+export async function runReviewSubagent(task: string, cwd: string, config: ResolvedReviewConfig, signal?: AbortSignal) {
 	const details = createChildRunDetails(task, cwd, config);
 	const args = [
 		"--mode",
@@ -79,7 +79,7 @@ export async function runReviewSubagent(task: string, cwd: string, config: Requi
 				reject(new Error(`Timed out waiting for RPC response to ${String(command.type)}.${details.stderr ? ` Stderr: ${details.stderr.trim()}` : ""}`));
 			}, timeoutMs);
 
-			pendingRequests.set(id, { resolve, reject, timeout });
+			pendingRequests.set(id, { resolve: (value) => resolve(value as T), reject, timeout });
 			proc.stdin.write(payload, (error) => {
 				if (!error) return;
 				clearTimeout(timeout);

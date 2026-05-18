@@ -1,10 +1,10 @@
 import fs from "node:fs";
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { ALLOWED_THINKING, DEFAULT_CONFIG, REVIEW_COMMAND, getAgentDir, getConfigPath } from "./constants.js";
-import type { ChildRunDetails, ReviewConfig, ThinkingLevel, UsageStats } from "./types.js";
+import type { ChildRunDetails, ParsedModelRef, ResolvedReviewConfig, ReviewConfig, ThinkingLevel, UsageStats } from "./types.js";
 
-function normalizeThinking(value: ThinkingLevel | undefined): ThinkingLevel {
-	return value && ALLOWED_THINKING.has(value) ? value : DEFAULT_CONFIG.thinking;
+function normalizeThinking(value: ThinkingLevel | undefined, fallback: ThinkingLevel = DEFAULT_CONFIG.thinking): ThinkingLevel {
+	return value && ALLOWED_THINKING.has(value) ? value : fallback;
 }
 
 export function ensureConfigFile(): string {
@@ -17,7 +17,7 @@ export function ensureConfigFile(): string {
 	return configPath;
 }
 
-export function readConfig(): Required<ReviewConfig> {
+export function readConfig(): Omit<ResolvedReviewConfig, "source"> {
 	let parsed: ReviewConfig | undefined;
 	const configPath = ensureConfigFile();
 	try {
@@ -26,9 +26,23 @@ export function readConfig(): Required<ReviewConfig> {
 		throw new Error(`Could not parse ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
 	}
 
+	const reviewModel = typeof parsed?.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_CONFIG.model;
+	const summary = parsed?.summary;
+	const configuredSummaryModel = typeof summary?.model === "string" && summary.model.trim() ? summary.model.trim() : DEFAULT_CONFIG.summary.model;
+	const defaultSummaryModelParsed = splitModelRef(DEFAULT_CONFIG.summary.model)!;
+	const summaryModelParsed = splitModelRef(configuredSummaryModel) ?? defaultSummaryModelParsed;
+	const summaryModel = `${summaryModelParsed.provider}/${summaryModelParsed.modelId}`;
+
 	return {
-		model: typeof parsed?.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_CONFIG.model,
+		model: reviewModel,
 		thinking: normalizeThinking(parsed?.thinking),
+		summary: {
+			enabled: typeof summary?.enabled === "boolean" ? summary.enabled : DEFAULT_CONFIG.summary.enabled,
+			model: summaryModel,
+			modelParsed: summaryModelParsed,
+			thinking: normalizeThinking(summary?.thinking, DEFAULT_CONFIG.summary.thinking),
+			source: "configured",
+		},
 	};
 }
 
@@ -55,7 +69,7 @@ export function isSubagentFailure(details: Pick<ChildRunDetails, "exitCode" | "s
 	return details.exitCode !== 0 || details.stopReason === "error" || details.stopReason === "aborted";
 }
 
-function splitModelRef(modelRef: string): { provider: string; modelId: string } | undefined {
+function splitModelRef(modelRef: string): ParsedModelRef | undefined {
 	const slash = modelRef.indexOf("/");
 	if (slash <= 0 || slash === modelRef.length - 1) return undefined;
 	return {
@@ -73,10 +87,25 @@ async function canUseModel(ctx: ExtensionCommandContext, modelRef: string): Prom
 	return auth.ok;
 }
 
-export async function resolveReviewConfig(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<Required<ReviewConfig> & { source: "configured" | "current" }> {
+export async function resolveReviewConfig(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<ResolvedReviewConfig> {
 	const configured = readConfig();
+	let summary = configured.summary;
+
+	if (summary.enabled && !(await canUseModel(ctx, summary.model)) && ctx.model) {
+		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+		if (auth.ok) {
+			const currentModel = `${ctx.model.provider}/${ctx.model.id}`;
+			summary = {
+				...summary,
+				model: currentModel,
+				modelParsed: { provider: ctx.model.provider, modelId: ctx.model.id },
+				source: "current",
+			};
+		}
+	}
+
 	if (await canUseModel(ctx, configured.model)) {
-		return { ...configured, source: "configured" };
+		return { ...configured, summary, source: "configured" };
 	}
 
 	if (ctx.model) {
@@ -86,9 +115,10 @@ export async function resolveReviewConfig(pi: ExtensionAPI, ctx: ExtensionComman
 				model: `${ctx.model.provider}/${ctx.model.id}`,
 				thinking: pi.getThinkingLevel() as ThinkingLevel,
 				source: "current",
+				summary,
 			};
 		}
 	}
 
-	return { ...configured, source: "configured" };
+	return { ...configured, summary, source: "configured" };
 }

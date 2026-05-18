@@ -1,11 +1,36 @@
-import type { Message } from "@mariozechner/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+export interface SummaryConfig {
+	enabled?: boolean;
+	model?: string;
+	thinking?: ThinkingLevel;
+}
 
 export interface ReviewConfig {
 	model: string;
 	thinking?: ThinkingLevel;
+	summary?: SummaryConfig;
 }
+
+export interface ParsedModelRef {
+	provider: string;
+	modelId: string;
+}
+
+export interface ResolvedSummaryConfig {
+	enabled: boolean;
+	model: string;
+	modelParsed: ParsedModelRef;
+	thinking: ThinkingLevel;
+	source: "configured" | "current";
+}
+
+export type ResolvedReviewConfig = Required<Pick<ReviewConfig, "model" | "thinking">> & {
+	source: "configured" | "current";
+	summary: ResolvedSummaryConfig;
+};
 
 export interface UsageStats {
 	input: number;

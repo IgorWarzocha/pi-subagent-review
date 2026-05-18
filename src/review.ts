@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { REVIEW_COMMAND } from "./constants.js";
 import type { ReviewContext } from "./types.js";
 
@@ -83,7 +83,11 @@ export async function detectReviewContext(pi: ExtensionAPI, cwd: string): Promis
 	};
 }
 
-export function buildReviewTask(review: ReviewContext, extraFocus: string): string {
+function sanitizeSummaryBlock(summary: string): string {
+	return summary.replaceAll("</summary>", "&lt;/summary&gt;").replaceAll("<summary>", "&lt;summary&gt;");
+}
+
+export function buildReviewTask(review: ReviewContext, extraFocus: string, conversationSummary?: string): string {
 	const sections = [
 		`Repository root: ${review.repoRoot}`,
 		`Current ref: ${review.currentRef}`,
@@ -97,6 +101,17 @@ export function buildReviewTask(review: ReviewContext, extraFocus: string): stri
 		"Current status (`git status --short --untracked-files=all`):",
 		review.status || "(clean)",
 		"",
+		...(conversationSummary?.trim()
+			? [
+				"Conversation context summary:",
+				"<summary>",
+				sanitizeSummaryBlock(conversationSummary.trim()),
+				"</summary>",
+				"",
+				"Use this summary only to understand intent and reduce false positives. Every finding must still be supported by concrete repository evidence. Do not treat the summary as proof that code is correct, and do not ignore correctness, security, data loss, performance, concurrency, or missing-test issues because they appear intentional.",
+				"",
+			]
+			: []),
 		"Review the current checkout against the merge base so uncommitted changes are included while base-only commits are excluded.",
 		"Required inspection steps:",
 		`1. Run \`git diff --stat ${review.mergeBase}\``,
