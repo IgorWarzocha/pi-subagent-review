@@ -44,6 +44,9 @@ function normalizeLocalBranchRef(ref: string): string | undefined {
 }
 
 async function getConfiguredParentBranch(pi: ExtensionAPI, cwd: string, currentBranch: string): Promise<string | undefined> {
+	const remote = await runGit(pi, cwd, ["config", "--get", `branch.${currentBranch}.remote`]);
+	if (remote.code === 0 && remote.stdout.trim() && remote.stdout.trim() !== ".") return undefined;
+
 	const merge = await runGit(pi, cwd, ["config", "--get", `branch.${currentBranch}.merge`]);
 	if (merge.code !== 0) return undefined;
 	const branch = normalizeLocalBranchRef(merge.stdout.trim());
@@ -63,7 +66,7 @@ async function inferParentBranchFromCreationCommit(pi: ExtensionAPI, cwd: string
 		})
 		.filter((candidate) => candidate.branch && candidate.branch !== currentBranch);
 
-	return candidates.find((candidate) => candidate.tip === commit)?.branch ?? candidates[0]?.branch;
+	return candidates.find((candidate) => candidate.tip === commit)?.branch;
 }
 
 async function getReflogParentBranch(pi: ExtensionAPI, cwd: string, currentBranch: string): Promise<string | undefined> {
@@ -78,7 +81,7 @@ async function getReflogParentBranch(pi: ExtensionAPI, cwd: string, currentBranc
 		const createdFrom = match[1] ?? "";
 		const candidate = normalizeLocalBranchRef(createdFrom);
 		if (candidate && candidate !== currentBranch && await hasLocalBranch(pi, cwd, candidate)) return candidate;
-		if (createdFrom.trim() === "HEAD" && commit) return inferParentBranchFromCreationCommit(pi, cwd, currentBranch, commit);
+		if (/^HEAD(?:[~^].*)?$/.test(createdFrom.trim()) && commit) return inferParentBranchFromCreationCommit(pi, cwd, currentBranch, commit);
 	}
 
 	return undefined;
