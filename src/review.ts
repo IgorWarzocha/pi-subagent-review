@@ -64,17 +64,24 @@ async function inferParentBranchFromCreationCommit(pi: ExtensionAPI, cwd: string
 			const [branch, tip] = line.split("\0");
 			return { branch: branch ?? "", tip: tip ?? "" };
 		})
-		.filter((candidate) => candidate.branch && candidate.branch !== currentBranch);
+		.filter((candidate) => candidate.branch && candidate.branch !== currentBranch && candidate.tip === commit);
 
-	return candidates.find((candidate) => candidate.tip === commit)?.branch;
+	return candidates.length === 1 ? candidates[0]?.branch : undefined;
 }
 
 async function getReflogParentBranch(pi: ExtensionAPI, cwd: string, currentBranch: string): Promise<string | undefined> {
 	const result = await runGit(pi, cwd, ["reflog", "show", "--format=%H%x00%gs", `refs/heads/${currentBranch}`]);
 	if (result.code !== 0) return undefined;
 
-	for (const line of result.stdout.split("\n").reverse()) {
+	for (const line of result.stdout.split("\n")) {
 		const [commit, subject] = line.split("\0");
+		const copyMatch = (subject ?? "").match(/^Branch: copied refs\/heads\/(.+) to refs\/heads\/.+$/);
+		if (copyMatch) {
+			const candidate = normalizeLocalBranchRef(copyMatch[1] ?? "");
+			if (candidate && candidate !== currentBranch && await hasLocalBranch(pi, cwd, candidate)) return candidate;
+			continue;
+		}
+
 		const match = (subject ?? "").match(/^branch: Created from (.+)$/);
 		if (!match) continue;
 
@@ -209,9 +216,16 @@ export function buildReviewTask(review: ReviewContext, extraFocus: string, conve
 	return sections.join("\n");
 }
 
+function markdownCodeSpan(value: string): string {
+	const longestBacktickRun = Math.max(0, ...Array.from(value.matchAll(/`+/g), (match) => match[0].length));
+	const delimiter = "`".repeat(longestBacktickRun + 1);
+	const padding = value.startsWith("`") || value.endsWith("`") ? " " : "";
+	return `${delimiter}${padding}${value}${padding}${delimiter}`;
+}
+
 export function buildReviewUserMessage(review: ReviewContext, findings: string): string {
 	return [
-		`Review findings from /${REVIEW_COMMAND} against local base branch \`${review.baseBranch}\` (${review.baseSource === "parent" ? "detected parent branch" : "fallback branch"}) in \`${review.repoRoot}\` (merge base \`${review.mergeBase.slice(0, 12)}\`):`,
+		`Review findings from /${REVIEW_COMMAND} against local base branch ${markdownCodeSpan(review.baseBranch)} (${review.baseSource === "parent" ? "detected parent branch" : "fallback branch"}) in ${markdownCodeSpan(review.repoRoot)} (merge base ${markdownCodeSpan(review.mergeBase.slice(0, 12))}):`,
 		"",
 		findings.trim() || "No actionable issues found.",
 		"",

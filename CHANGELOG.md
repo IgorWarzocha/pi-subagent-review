@@ -5,6 +5,7 @@
 - Detect local parent branches before falling back to `dev`/`main`/`master` review bases.
 - Use branch config and reflog creation metadata so worktree-created branches review against their parent branch when possible.
 - Label review output as parent-detected or fallback base.
+- Hardened parent-branch inference for ambiguous reflogs and unusual branch names.
 
 ## 0.1.51
 
