@@ -29,12 +29,15 @@ The widget is UI-only and is cleared when the command finishes, fails, or is can
 
 The command chooses the base branch automatically:
 
+- if the current branch has a configured local parent/upstream branch, it reviews against that branch
+- if the current branch reflog says it was created from another local branch, it reviews against that branch
+- if the branch was created from `HEAD`, it tries to infer the parent from the branch creation commit
 - if you are on a branch other than `main`, `master`, or `dev`, it reviews against `dev`
 - if no local `dev` exists, it falls back to `main`, then `master`
 - if you are on `dev`, it reviews against `main`, then `master`
 - if you are on `main` or `master`, it prefers `dev` when available
 
-This means you usually never need to specify the diff base manually.
+This makes `/review` work better in git worktrees: a worktree branch created from another local branch is reviewed against that parent branch instead of blindly falling back to `dev`/`main`/`master`. If no parent can be detected, the old fallback rules still apply.
 
 ## User arguments
 
