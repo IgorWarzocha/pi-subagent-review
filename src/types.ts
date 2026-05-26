@@ -60,7 +60,8 @@ export interface ChildRunDetails {
 export interface ReviewContext {
 	repoRoot: string;
 	currentRef: string;
-	baseBranch: "main" | "master" | "dev";
+	baseBranch: string;
+	baseSource: "parent" | "fallback";
 	mergeBase: string;
 	baseTip: string;
 	status: string;

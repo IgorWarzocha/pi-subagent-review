@@ -16,13 +16,8 @@ async function gitString(pi: ExtensionAPI, cwd: string, args: string[], timeout 
 	return result.stdout.trim();
 }
 
-async function hasLocalBranch(pi: ExtensionAPI, cwd: string, branch: "main" | "master"): Promise<boolean> {
+async function hasLocalBranch(pi: ExtensionAPI, cwd: string, branch: string): Promise<boolean> {
 	const result = await runGit(pi, cwd, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
-	return result.code === 0;
-}
-
-async function hasLocalDevBranch(pi: ExtensionAPI, cwd: string): Promise<boolean> {
-	const result = await runGit(pi, cwd, ["show-ref", "--verify", "--quiet", "refs/heads/dev"]);
 	return result.code === 0;
 }
 
@@ -33,29 +28,87 @@ async function hasTrackedChangesAgainst(pi: ExtensionAPI, cwd: string, revision:
 	throw new Error(result.stderr.trim() || `git diff --quiet ${revision} failed with exit code ${result.code}`);
 }
 
+async function firstExistingBranch(pi: ExtensionAPI, cwd: string, branches: string[]): Promise<string | undefined> {
+	for (const branch of branches) {
+		if (await hasLocalBranch(pi, cwd, branch)) return branch;
+	}
+	return undefined;
+}
+
+function normalizeLocalBranchRef(ref: string): string | undefined {
+	const trimmed = ref.trim();
+	if (!trimmed || trimmed === "HEAD") return undefined;
+	if (trimmed.startsWith("refs/heads/")) return trimmed.slice("refs/heads/".length);
+	if (trimmed.startsWith("heads/")) return trimmed.slice("heads/".length);
+	return trimmed.replace(/^\/+/, "");
+}
+
+async function getConfiguredParentBranch(pi: ExtensionAPI, cwd: string, currentBranch: string): Promise<string | undefined> {
+	const merge = await runGit(pi, cwd, ["config", "--get", `branch.${currentBranch}.merge`]);
+	if (merge.code !== 0) return undefined;
+	const branch = normalizeLocalBranchRef(merge.stdout.trim());
+	if (!branch || branch === currentBranch) return undefined;
+	return (await hasLocalBranch(pi, cwd, branch)) ? branch : undefined;
+}
+
+async function inferParentBranchFromCreationCommit(pi: ExtensionAPI, cwd: string, currentBranch: string, commit: string): Promise<string | undefined> {
+	const result = await runGit(pi, cwd, ["for-each-ref", "--contains", commit, "--format=%(refname:short)%00%(objectname)", "refs/heads"]);
+	if (result.code !== 0) return undefined;
+
+	const candidates = result.stdout
+		.split("\n")
+		.map((line) => {
+			const [branch, tip] = line.split("\0");
+			return { branch: branch ?? "", tip: tip ?? "" };
+		})
+		.filter((candidate) => candidate.branch && candidate.branch !== currentBranch);
+
+	return candidates.find((candidate) => candidate.tip === commit)?.branch ?? candidates[0]?.branch;
+}
+
+async function getReflogParentBranch(pi: ExtensionAPI, cwd: string, currentBranch: string): Promise<string | undefined> {
+	const result = await runGit(pi, cwd, ["reflog", "show", "--format=%H%x00%gs", `refs/heads/${currentBranch}`]);
+	if (result.code !== 0) return undefined;
+
+	for (const line of result.stdout.split("\n").reverse()) {
+		const [commit, subject] = line.split("\0");
+		const match = (subject ?? "").match(/^branch: Created from (.+)$/);
+		if (!match) continue;
+
+		const createdFrom = match[1] ?? "";
+		const candidate = normalizeLocalBranchRef(createdFrom);
+		if (candidate && candidate !== currentBranch && await hasLocalBranch(pi, cwd, candidate)) return candidate;
+		if (createdFrom.trim() === "HEAD" && commit) return inferParentBranchFromCreationCommit(pi, cwd, currentBranch, commit);
+	}
+
+	return undefined;
+}
+
+async function detectParentBranch(pi: ExtensionAPI, cwd: string, currentBranch: string): Promise<string | undefined> {
+	if (!currentBranch) return undefined;
+	return (await getConfiguredParentBranch(pi, cwd, currentBranch)) ?? (await getReflogParentBranch(pi, cwd, currentBranch));
+}
+
+async function detectFallbackBaseBranch(pi: ExtensionAPI, cwd: string, currentBranch: string): Promise<string | undefined> {
+	const hasDev = await hasLocalBranch(pi, cwd, "dev");
+	const hasMain = await hasLocalBranch(pi, cwd, "main");
+	const hasMaster = await hasLocalBranch(pi, cwd, "master");
+
+	if (currentBranch === "dev") return (await firstExistingBranch(pi, cwd, ["main", "master"]));
+	if (currentBranch !== "main" && currentBranch !== "master") return (await firstExistingBranch(pi, cwd, ["dev", "main", "master"]));
+	if (hasDev) return "dev";
+	if (currentBranch === "main" && hasMaster) return "master";
+	if (currentBranch === "master" && hasMain) return "main";
+	return currentBranch || undefined;
+}
+
 export async function detectReviewContext(pi: ExtensionAPI, cwd: string): Promise<ReviewContext> {
 	const repoRoot = await gitString(pi, cwd, ["rev-parse", "--show-toplevel"]);
 	const currentBranch = await gitString(pi, repoRoot, ["branch", "--show-current"]);
-	const [hasDev, hasMain, hasMaster] = await Promise.all([
-		hasLocalDevBranch(pi, repoRoot),
-		hasLocalBranch(pi, repoRoot, "main"),
-		hasLocalBranch(pi, repoRoot, "master"),
-	]);
 
-	let baseBranch: "main" | "master" | "dev" | undefined;
-	if (currentBranch === "dev") {
-		if (hasMain) baseBranch = "main";
-		else if (hasMaster) baseBranch = "master";
-	} else if (currentBranch !== "main" && currentBranch !== "master") {
-		if (hasDev) baseBranch = "dev";
-		else if (hasMain) baseBranch = "main";
-		else if (hasMaster) baseBranch = "master";
-	} else {
-		if (hasDev) baseBranch = "dev";
-		else if (currentBranch === "main" && hasMaster) baseBranch = "master";
-		else if (currentBranch === "master" && hasMain) baseBranch = "main";
-		else baseBranch = currentBranch as "main" | "master";
-	}
+	const parentBranch = await detectParentBranch(pi, repoRoot, currentBranch);
+	const baseBranch = parentBranch ?? (await detectFallbackBaseBranch(pi, repoRoot, currentBranch));
+	const baseSource = parentBranch ? "parent" : "fallback";
 
 	if (!baseBranch) {
 		const branches = await gitString(pi, repoRoot, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]);
@@ -74,6 +127,7 @@ export async function detectReviewContext(pi: ExtensionAPI, cwd: string): Promis
 		repoRoot,
 		currentRef,
 		baseBranch,
+		baseSource,
 		mergeBase,
 		baseTip,
 		status,
@@ -94,7 +148,7 @@ export function buildReviewTask(review: ReviewContext, extraFocus: string, conve
 	const sections = [
 		`Repository root: ${review.repoRoot}`,
 		`Current ref: ${review.currentRef}`,
-		`Chosen local base branch: ${review.baseBranch}`,
+		`Chosen local base branch: ${review.baseBranch} (${review.baseSource === "parent" ? "detected parent branch" : "fallback branch"})`,
 		`Base branch tip (short SHA): ${review.baseTip}`,
 		`Merge base (${review.baseBranch}, HEAD): ${review.mergeBase}`,
 		"",
@@ -154,7 +208,7 @@ export function buildReviewTask(review: ReviewContext, extraFocus: string, conve
 
 export function buildReviewUserMessage(review: ReviewContext, findings: string): string {
 	return [
-		`Review findings from /${REVIEW_COMMAND} against local base branch \`${review.baseBranch}\` in \`${review.repoRoot}\` (merge base \`${review.mergeBase.slice(0, 12)}\`):`,
+		`Review findings from /${REVIEW_COMMAND} against local base branch \`${review.baseBranch}\` (${review.baseSource === "parent" ? "detected parent branch" : "fallback branch"}) in \`${review.repoRoot}\` (merge base \`${review.mergeBase.slice(0, 12)}\`):`,
 		"",
 		findings.trim() || "No actionable issues found.",
 		"",
