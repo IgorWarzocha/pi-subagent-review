@@ -1,107 +1,13 @@
 # pi-subagent-review
 
-`@howaboua/pi-subagent-review` is a Pi extension that adds one slash command:
+This package has moved to the Howaboua Pi Stuff monorepo:
 
-- `/review`
+https://github.com/IgorWarzocha/howaboua-pi-stuff/tree/main/packages/pi-subagent-review
 
-It runs an isolated review subagent against your current repo, optionally prepares a compact conversation-context summary first, injects the findings back into the session as a user message, and asks the main agent to triage those advisory findings before deciding what to address. It is modelled after Codex CLI's /review command.
+Install stays the same:
 
-## What it does
-
-`/review`:
-- detects the current git repo
-- chooses a base branch automatically
-- computes the merge base with `HEAD`
-- inspects committed and dirty worktree changes
-- summarizes the current Pi session branch as review context, when enabled
-- runs an isolated review subagent
-- sends the findings back into the current Pi session as a user message
-- makes clear that the findings are advisory, not direct user instructions, so the main agent should triage them against prior context before editing
-
-While `/review` is running, the extension shows a small review widget above the editor with one of two states:
-
-- `Preparing review context…`
-- `Reviewing changes…`
-
-The widget is UI-only and is cleared when the command finishes, fails, or is cancelled.
-
-## Automatic base branch selection
-
-The command chooses the base branch automatically:
-
-- if the current branch has a configured local parent/upstream branch, it reviews against that branch
-- if the current branch reflog says it was created from another local branch, it reviews against that branch
-- if the branch was created from `HEAD`, it tries to infer the parent from the branch creation commit
-- if you are on a branch other than `main`, `master`, or `dev`, it reviews against `dev`
-- if no local `dev` exists, it falls back to `main`, then `master`
-- if you are on `dev`, it reviews against `main`, then `master`
-- if you are on `main` or `master`, it prefers `dev` when available
-
-This makes `/review` work better in git worktrees: a worktree branch created from another local branch is reviewed against that parent branch instead of blindly falling back to `dev`/`main`/`master`. If no parent can be detected, the old fallback rules still apply.
-
-## User arguments
-
-Anything after `/review` is treated as extra review guidance.
-
-Examples:
-
-```text
-/review
-/review focus extra attention on migrations and tests
-/review assess whether we introduced new UI elements instead of reusing established components and existing CSS patterns
-```
-
-## Config
-
-On first load, the extension creates:
-
-- `~/.pi/agent/pi-subagent-review.json`
-
-If Pi is using a custom agent directory via `PI_CODING_AGENT_DIR`, the file is created there instead.
-
-Edit that file to change the default review model or thinking level, and the model used to summarize conversation context before review:
-
-```json
-{
-  "model": "openai-codex/gpt-5.5",
-  "thinking": "medium",
-  "summary": {
-    "enabled": true,
-    "model": "openai/gpt-5.4-mini",
-    "thinking": "low"
-  }
-}
-```
-
-The summary model uses the same `provider/model` string format as the reviewer model. The generated summary is injected into the isolated review task as branch-style context; raw conversation turns are not sent to the review subagent. If the configured review or summary model is not available for the user, `/review` falls back to the current session model automatically. If conversation summarization still fails, `/review` continues with a diff-only review.
-
-Existing config files from older versions are migrated on load. If a config has `model` and `thinking` but no `summary` block, the extension adds one using the same model and low thinking:
-
-```json
-{
-  "summary": {
-    "enabled": true,
-    "model": "<existing review model>",
-    "thinking": "low"
-  }
-}
-```
-
-If a `summary` block already exists, it is left unchanged.
-
-## Install
-
-Installation methods:
-
-```bash
-pi install /absolute/path/to/pi-subagent-review
+```sh
 pi install npm:@howaboua/pi-subagent-review
-pi install git:github.com/IgorWarzocha/pi-subagent-review
 ```
 
-Then reload or restart Pi.
-
-## Notes
-
-- This extension registers `/review`.
-- Do not load it together with another extension that also registers `/review` unless you intentionally want that command collision.
+The old README is preserved in [`README.legacy.md`](./README.legacy.md).
